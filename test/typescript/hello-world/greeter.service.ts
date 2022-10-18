@@ -2,10 +2,10 @@
 
 import { Service } from "../../../";
 import { Context } from "../../../";
-import { ActionHooks, ServiceHooks, ServiceHooksAfter, ServiceSchema } from "../../../";
+import { HooksAfter } from "../../../";
 
 type GreeterWelcomeParams = {
-	name: string
+	name: string;
 };
 
 export default class GreeterService extends Service {
@@ -33,15 +33,15 @@ export default class GreeterService extends Service {
 							return await Promise.resolve(res);
 						},
 						"anotherHookAfter"
-					],
-				} as ServiceHooksAfter,
+					]
+				},
 				error: {
 					welcome(ctx: Context<GreeterWelcomeParams>, err: Error): void {
 						// console.log(`Service hook "error".`);
 						throw err;
 					}
 				}
-			} as ServiceHooks,
+			},
 			actions: {
 				hello: {
 					handler: this.hello,
@@ -57,11 +57,11 @@ export default class GreeterService extends Service {
 							},
 							"anotherHookAfter"
 						]
-					} as ActionHooks
+					}
 				},
 				welcome: this.welcome
 			}
-		} as ServiceSchema);
+		});
 	}
 
 	/**
@@ -86,4 +86,4 @@ export default class GreeterService extends Service {
 		// console.log(`Another async hook "after".`);
 		return await Promise.resolve(res);
 	}
-};
+}

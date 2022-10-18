@@ -458,16 +458,6 @@ declare namespace Moleculer {
 
 	type ActionVisibility = "published" | "public" | "protected" | "private";
 
-	type ActionHookBefore = (this: Service<S>,ctx: Context<any, any>) => Promise<void> | void;
-	type ActionHookAfter = (this: Service<S>, ctx: Context<any, any>, res: any) => Promise<any> | any;
-	type ActionHookError = (this: Service<S>, ctx: Context<any, any>, err: Error) => Promise<void> | void;
-
-	interface ActionHooks {
-		before?: string | ActionHookBefore | Array<string | ActionHookBefore>;
-		after?: string | ActionHookAfter | Array<string | ActionHookAfter>;
-		error?: string | ActionHookError | Array<string | ActionHookError>;
-	}
-
 	interface RestSchema {
 		path?: string;
 		method?: "GET" | "POST" | "DELETE" | "PUT" | "PATCH";
@@ -475,40 +465,43 @@ declare namespace Moleculer {
 		basePath?: string;
 	}
 
-	type ActionSchema<S = ServiceSettingSchema> = {
+	type ActionSchema<
+		AHD extends ActionHandler = ActionHandler,
+		AH extends ActionHooks = ActionHooks
+	> = {
 		name?: string;
 		rest?: RestSchema | string | string[];
 		visibility?: ActionVisibility;
 		params?: ActionParams;
-		service?: Service;
+		service?: ServiceType;
 		cache?: boolean | ActionCacheOptions;
-		handler?: ActionHandler;
+		handler?: AHD;
 		tracing?: boolean | TracingActionOptions;
 		bulkhead?: BulkheadOptions;
 		circuitBreaker?: BrokerCircuitBreakerOptions;
 		retryPolicy?: RetryPolicyOptions;
 		fallback?: string | FallbackHandler;
-		hooks?: ActionHooks;
+		hooks?: AH;
 
 		[key: string]: any;
-	} & ThisType<Service<S>>;
+	};
 
-	type EventSchema<S = ServiceSettingSchema> = {
+	type EventSchema = {
 		name?: string;
 		group?: string;
 		params?: ActionParams;
-		service?: Service;
+		service?: ServiceType;
 		tracing?: boolean | TracingEventOptions;
 		bulkhead?: BulkheadOptions;
 		handler?: ActionHandler;
 		context?: boolean;
 
 		[key: string]: any;
-	} & ThisType<Service<S>>;
+	};
 
-	type ServiceActionsSchema<S = ServiceSettingSchema> = {
+	type ServiceActionsSchema = {
 		[key: string]: ActionSchema | ActionHandler | boolean;
-	} & ThisType<Service<S>>;
+	};
 
 	class BrokerNode {
 		id: string;
@@ -545,7 +538,7 @@ declare namespace Moleculer {
 		endpoint: Endpoint | null;
 		action: ActionSchema | null;
 		event: EventSchema | null;
-		service: Service | null;
+		service: ServiceType | null;
 		nodeID: string | null;
 
 		eventName: string | null;
@@ -634,7 +627,7 @@ declare namespace Moleculer {
 
 	type ServiceEventHandler = (ctx: Context) => void | Promise<void>;
 
-	type ServiceEvent<S = ServiceSettingSchema> = {
+	type ServiceEvent = {
 		name?: string;
 		group?: string;
 		params?: ActionParams;
@@ -642,13 +635,17 @@ declare namespace Moleculer {
 		debounce?: number;
 		throttle?: number;
 		handler?: ServiceEventHandler | ServiceEventLegacyHandler;
-	} & ThisType<Service<S>>;
+	};
 
 	type ServiceEvents = {
 		[key: string]: ServiceEventHandler | ServiceEventLegacyHandler | ServiceEvent;
 	};
 
-	type ServiceMethods = { [key: string]: (...args: any[]) => any } & ThisType<Service>;
+	type ServiceMethodsSchema = { [key: string]: (...args: any[]) => any };
+
+	type ServiceMethods<SS extends ServiceSchema> = {
+		[Name in keyof SS["methods"]]: SS["methods"][Name];
+	};
 
 	type CallMiddlewareHandler = (
 		actionName: string,
@@ -660,7 +657,7 @@ declare namespace Moleculer {
 			| ((handler: ActionHandler, action: ActionSchema) => any)
 			| ((handler: ActionHandler, event: ServiceEvent) => any)
 			| ((handler: ActionHandler) => any)
-			| ((service: Service) => any)
+			| ((service: ServiceType) => any)
 			| ((broker: ServiceBroker) => any)
 			| ((handler: CallMiddlewareHandler) => CallMiddlewareHandler);
 	};
@@ -690,23 +687,74 @@ declare namespace Moleculer {
 		): typeof handler;
 	}
 
-	interface ServiceHooksBefore {
-		[key: string]: string | ActionHookBefore | Array<string | ActionHookBefore>;
+	type HookBefore = (ctx: Context<any, any>) => Promise<void> | void;
+	type HookAfter = (ctx: Context<any, any>, res: any) => Promise<any> | any;
+	type HookError = (ctx: Context<any, any>, err: Error) => Promise<void> | void;
+
+	type HooksBefore = {
+		[key: string]: string | HookBefore | (string | HookBefore)[];
+	};
+
+	interface HooksAfter {
+		[key: string]: string | HookAfter | (string | HookAfter)[];
 	}
 
-	interface ServiceHooksAfter {
-		[key: string]: string | ActionHookAfter | Array<string | ActionHookAfter>;
+	interface HooksError {
+		[key: string]: string | HookError | (string | HookError)[];
 	}
 
-	interface ServiceHooksError {
-		[key: string]: string | ActionHookError | Array<string | ActionHookError>;
-	}
+	type ServiceHooks = {
+		before?: HooksBefore;
+		after?: HooksAfter;
+		error?: HooksError;
+	};
 
-	interface ServiceHooks {
-		before?: ServiceHooksBefore;
-		after?: ServiceHooksAfter;
-		error?: ServiceHooksError;
-	}
+	type ActionHooks = {
+		before?: string | HookBefore | (string | HookBefore)[];
+		after?: string | HookAfter | (string | HookAfter)[];
+		error?: string | HookError | (string | HookError)[];
+	};
+
+	type ServiceHooksSchemaWrapper<
+		SHS extends ServiceHooks | undefined = ServiceHooks | undefined,
+		SS extends ServiceSchema = ServiceSchema
+	> = SHS extends ServiceHooks
+		? {
+				before?: ServiceHookGroupSchemaWrapper<SHS["before"], SS>;
+
+				after?: ServiceHookGroupSchemaWrapper<SHS["after"], SS>;
+
+				error?: ServiceHookGroupSchemaWrapper<SHS["error"], SS>;
+		  }
+		: undefined;
+
+	type ActionHooksSchemaWrapper<
+		AHS extends ActionHooks | undefined = ActionHooks | undefined,
+		SS extends ServiceSchema = ServiceSchema
+	> = AHS extends ActionHooks
+		? {
+				before?: ActionHookGroupSchemaWrapper<AHS["before"], SS>;
+
+				after?: ActionHookGroupSchemaWrapper<AHS["after"], SS>;
+
+				error?: ActionHookGroupSchemaWrapper<AHS["error"], SS>;
+		  }
+		: undefined;
+
+	type ServiceHookGroupSchemaWrapper<SHG, SS extends ServiceSchema = ServiceSchema> = {
+		[Name in keyof SHG]: SHG[Name] extends any[] ? HookArrayWrapper<SHG[Name], SS> : SHG[Name];
+	};
+
+	type ActionHookGroupSchemaWrapper<
+		AHG,
+		SS extends ServiceSchema = ServiceSchema
+	> = AHG extends any[] ? HookArrayWrapper<AHG, SS> : AHG;
+
+	type HookArrayWrapper<HA, SS extends ServiceSchema = ServiceSchema> = {
+		[K in keyof HA]: HA[K] extends (...args: any) => any
+			? (this: ServiceType<SS>, ...args: Parameters<HA[K]>) => ReturnType<HA[K]>
+			: string;
+	};
 
 	interface ServiceDependency {
 		name: string;
@@ -721,7 +769,7 @@ declare namespace Moleculer {
 		metadata?: any;
 		actions?: ServiceActionsSchema;
 		mixins?: Array<Partial<ServiceSchema>>;
-		methods?: ServiceMethods;
+		methods?: ServiceMethodsSchema;
 		hooks?: ServiceHooks;
 
 		events?: ServiceEvents;
@@ -732,36 +780,76 @@ declare namespace Moleculer {
 		[name: string]: any;
 	}
 
-	type ServiceAction = <T = Promise<any>, P extends GenericObject = GenericObject>(
+	type OmitWithIndexSignature<T, K extends PropertyKey> = {
+		[P in keyof T as Exclude<P, K>]: T[P];
+	};
+	type ServiceSchemaWrapper<SS extends ServiceSchema = ServiceSchema> = OmitWithIndexSignature<
+		SS,
+		"hooks" | "actions"
+	> & {
+		hooks?: ServiceHooksSchemaWrapper<SS["hooks"], SS>;
+		actions?: ServiceActionsSchemaWrapper<SS>;
+	} & ThisType<ServiceType<SS>>;
+
+	type ServiceActionsSchemaWrapper<SS extends ServiceSchema = ServiceSchema> = {
+		[Name in keyof SS["actions"]]: SS["actions"][Name] extends ActionSchema
+			? OmitWithIndexSignature<SS["actions"][Name], "hooks"> & {
+					hooks?: SS["actions"][Name]["hooks"] extends ActionHooks
+						? ActionHooksSchemaWrapper<SS["actions"][Name]["hooks"], SS>
+						: undefined;
+			  }
+			: SS["actions"][Name];
+	};
+	type ServiceAction<T = Promise<any>, P extends GenericObject = GenericObject> = (
 		params?: P,
 		opts?: CallingOptions
 	) => T;
 
-	interface ServiceActions {
-		[name: string]: ServiceAction;
-	}
+	type ServiceActions<SS extends ServiceSchema = ServiceSchema> = {
+		[Name in keyof SS["actions"]]: SS["actions"][Name] extends ActionSchema | ActionHandler
+			? ServiceAction<ServiceActionReturnType<SS, Name>, ServiceActionParams<SS, Name>>
+			: undefined;
+	};
+
+	type ServiceActionParams<
+		SS extends ServiceSchema,
+		N extends keyof SS["actions"]
+	> = SS["actions"][N] extends ActionHandler
+		? Parameters<SS["actions"][N]>[0]["params"]
+		: SS["actions"][N] extends { handler: ActionHandler }
+		? Parameters<SS["actions"][N]["handler"]>[0]["params"]
+		: {};
+
+	type ServiceActionReturnType<
+		SS extends ServiceSchema,
+		N extends keyof SS["actions"]
+	> = SS["actions"][N] extends ActionHandler
+		? ReturnType<SS["actions"][N]>
+		: SS["actions"][N] extends { handler: ActionHandler }
+		? ReturnType<SS["actions"][N]["handler"]>
+		: undefined;
 
 	interface WaitForServicesResult {
 		services: string[];
 		statuses: Array<{ name: string; available: boolean }>;
 	}
 
-	class Service<S = ServiceSettingSchema> implements ServiceSchema<S> {
-		constructor(broker: ServiceBroker, schema?: ServiceSchema<S>);
+	class Service<SS extends ServiceSchema = ServiceSchema> {
+		constructor(broker: ServiceBroker, schema?: SS);
 
-		protected parseServiceSchema(schema: ServiceSchema<S>): void;
+		protected parseServiceSchema(schema: ServiceSchemaWrapper<SS>): void;
 
 		name: string;
 		fullName: string;
 		version?: string | number;
-		settings: S;
+		settings: NonNullable<SS["settings"]>;
 		metadata: GenericObject;
 		dependencies: string | ServiceDependency | Array<string | ServiceDependency>;
-		schema: ServiceSchema<S>;
-		originalSchema: ServiceSchema<S>;
+		schema: SS;
+		originalSchema: SS;
 		broker: ServiceBroker;
 		logger: LoggerInstance;
-		actions: ServiceActions;
+		actions: ServiceActions<SS>;
 		Promise: PromiseConstructorLike;
 		//currentContext: Context | null;
 
@@ -785,8 +873,6 @@ declare namespace Moleculer {
 			logger?: LoggerInstance
 		): Promise<WaitForServicesResult>;
 
-		[name: string]: any;
-
 		static applyMixins(schema: ServiceSchema): ServiceSchema;
 		static mergeSchemas(mixinSchema: ServiceSchema, svcSchema: ServiceSchema): ServiceSchema;
 		static mergeSchemaSettings(src: GenericObject, target: GenericObject): GenericObject;
@@ -803,6 +889,8 @@ declare namespace Moleculer {
 		): GenericObject;
 		static mergeSchemaUnknown(src: GenericObject, target: GenericObject): GenericObject;
 	}
+
+	type ServiceType<SS extends ServiceSchema = ServiceSchema> = Service<SS> & ServiceMethods<SS>;
 
 	type CheckRetryable = (err: Errors.MoleculerError | Error) => boolean;
 
@@ -924,7 +1012,7 @@ declare namespace Moleculer {
 
 		metadata?: GenericObject;
 
-		ServiceFactory?: typeof Service;
+		ServiceFactory?: ServiceType;
 		ContextFactory?: typeof Context;
 		Promise?: PromiseConstructorLike;
 
@@ -1025,12 +1113,12 @@ declare namespace Moleculer {
 	}
 
 	interface ActionEndpoint extends Endpoint {
-		service: Service;
+		service: ServiceType;
 		action: ActionSchema;
 	}
 
 	interface EventEndpoint extends Endpoint {
-		service: Service;
+		service: ServiceType;
 		event: EventSchema;
 	}
 
@@ -1065,7 +1153,7 @@ declare namespace Moleculer {
 		options: BrokerOptions;
 
 		Promise: PromiseConstructorLike;
-		ServiceFactory: typeof Service;
+		ServiceFactory: ServiceType;
 		ContextFactory: typeof Context;
 
 		started: boolean;
@@ -1076,7 +1164,7 @@ declare namespace Moleculer {
 
 		logger: LoggerInstance;
 
-		services: Array<Service>;
+		services: Array<ServiceType>;
 
 		localBus: EventEmitter2;
 
@@ -1121,11 +1209,11 @@ declare namespace Moleculer {
 		fatal(message: string, err?: Error, needExit?: boolean): void;
 
 		loadServices(folder?: string, fileMask?: string): number;
-		loadService(filePath: string): Service;
-		createService(schema: ServiceSchema, schemaMods?: ServiceSchema): Service;
-		destroyService(service: Service | string | ServiceSearchObj): Promise<void>;
+		loadService(filePath: string): ServiceType;
+		createService(schema: ServiceSchema, schemaMods?: ServiceSchema): ServiceType;
+		destroyService(service: ServiceType | string | ServiceSearchObj): Promise<void>;
 
-		getLocalService(name: string | ServiceSearchObj): Service;
+		getLocalService(name: string | ServiceSearchObj): ServiceType;
 		waitForServices(
 			serviceNames: string | Array<string> | Array<ServiceSearchObj>,
 			timeout?: number,
