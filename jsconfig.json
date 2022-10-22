@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
     "noImplicitThis": true,
-    "checkJs": false
+    "checkJs": false,
+    "strict": true
   },
   "exclude": ["node_modules"]
 }

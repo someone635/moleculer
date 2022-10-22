@@ -641,12 +641,6 @@ declare namespace Moleculer {
 		[key: string]: ServiceEventHandler | ServiceEventLegacyHandler | ServiceEvent;
 	};
 
-	type ServiceMethodsSchema = { [key: string]: (...args: any[]) => any };
-
-	type ServiceMethods<SS extends ServiceSchema> = {
-		[Name in keyof SS["methods"]]: SS["methods"][Name];
-	};
-
 	type CallMiddlewareHandler = (
 		actionName: string,
 		params: any,
@@ -768,7 +762,7 @@ declare namespace Moleculer {
 		dependencies?: string | ServiceDependency | Array<string | ServiceDependency>;
 		metadata?: any;
 		actions?: ServiceActionsSchema;
-		mixins?: Array<Partial<ServiceSchema>>;
+		mixins?: Partial<ServiceSchema>[];
 		methods?: ServiceMethodsSchema;
 		hooks?: ServiceHooks;
 
@@ -805,29 +799,77 @@ declare namespace Moleculer {
 		opts?: CallingOptions
 	) => T;
 
+	type TupleToUnion<T> = T extends []
+		? never
+		: T extends [infer First, ...infer Rest]
+		? First | TupleToUnion<Rest>
+		: never;
+
+	type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
+		k: infer I
+	) => void
+		? I
+		: never;
+
+	type FlattenedMixinsProperty<
+		M extends Partial<ServiceSchema>[],
+		P extends "actions" | "methods"
+	> = { [K in keyof M]: M[K][P] };
+
+	type MergedMixinsProperty<
+		M extends Partial<ServiceSchema>[] | undefined,
+		P extends "actions" | "methods"
+	> = M extends Partial<ServiceSchema>[]
+		? TupleToUnion<FlattenedMixinsProperty<M, P>> extends any
+			? UnionToIntersection<TupleToUnion<FlattenedMixinsProperty<M, P>>>
+			: never
+		: {};
+
+	type MergedActionSchemas<SS extends ServiceSchema = ServiceSchema> = MergedMixinsProperty<
+		SS["mixins"],
+		"actions"
+	> &
+		SS["actions"];
+
+	type ServiceMethodsSchema = { [key: string]: (...args: any[]) => any };
+	type MergedMethodSchemas<SS extends ServiceSchema = ServiceSchema> = MergedMixinsProperty<
+		SS["mixins"],
+		"methods"
+	> &
+		SS["methods"];
+
+	type ServiceMethods<SS extends ServiceSchema> = {
+		[Name in keyof MergedMethodSchemas<SS>]: MergedMethodSchemas<SS>[Name];
+	};
+
 	type ServiceActions<SS extends ServiceSchema = ServiceSchema> = {
-		[Name in keyof SS["actions"]]: SS["actions"][Name] extends ActionSchema | ActionHandler
-			? ServiceAction<ServiceActionReturnType<SS, Name>, ServiceActionParams<SS, Name>>
+		[Name in keyof MergedActionSchemas<SS>]: MergedActionSchemas<SS>[Name] extends
+			| ActionSchema
+			| ActionHandler
+			? ServiceAction<
+					ServiceActionReturnType<MergedActionSchemas<SS>, Name>,
+					ServiceActionParams<MergedActionSchemas<SS>, Name>
+			  >
 			: undefined;
 	};
 
 	type ServiceActionParams<
-		SS extends ServiceSchema,
-		N extends keyof SS["actions"]
-	> = SS["actions"][N] extends ActionHandler
-		? Parameters<SS["actions"][N]>[0]["params"]
-		: SS["actions"][N] extends { handler: ActionHandler }
-		? Parameters<SS["actions"][N]["handler"]>[0]["params"]
+		MAS extends MergedActionSchemas,
+		N extends keyof MAS
+	> = MAS[N] extends ActionHandler
+		? Parameters<MAS[N]>[0]["params"]
+		: MAS[N] extends ActionSchema & { handler: ActionHandler }
+		? Parameters<MAS[N]["handler"]>[0]["params"]
 		: {};
 
 	type ServiceActionReturnType<
-		SS extends ServiceSchema,
-		N extends keyof SS["actions"]
-	> = SS["actions"][N] extends ActionHandler
-		? ReturnType<SS["actions"][N]>
-		: SS["actions"][N] extends { handler: ActionHandler }
-		? ReturnType<SS["actions"][N]["handler"]>
-		: undefined;
+		MAS extends MergedActionSchemas,
+		N extends keyof MAS
+	> = MAS[N] extends ActionHandler
+		? ReturnType<MAS[N]>
+		: MAS[N] extends ActionSchema & { handler: ActionHandler }
+		? ReturnType<MAS[N]["handler"]>
+		: void;
 
 	interface WaitForServicesResult {
 		services: string[];
