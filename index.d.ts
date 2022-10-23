@@ -711,7 +711,7 @@ declare namespace Moleculer {
 
 	type ServiceHooksSchemaWrapper<
 		SHS extends ServiceHooks | undefined = ServiceHooks | undefined,
-		SS extends ServiceSchema = ServiceSchema
+		SS extends Partial<ServiceSchema> = ServiceSchema
 	> = SHS extends ServiceHooks
 		? {
 				before?: ServiceHookGroupSchemaWrapper<SHS["before"], SS>;
@@ -724,7 +724,7 @@ declare namespace Moleculer {
 
 	type ActionHooksSchemaWrapper<
 		AHS extends ActionHooks | undefined = ActionHooks | undefined,
-		SS extends ServiceSchema = ServiceSchema
+		SS extends Partial<ServiceSchema> = ServiceSchema
 	> = AHS extends ActionHooks
 		? {
 				before?: ActionHookGroupSchemaWrapper<AHS["before"], SS>;
@@ -735,16 +735,16 @@ declare namespace Moleculer {
 		  }
 		: undefined;
 
-	type ServiceHookGroupSchemaWrapper<SHG, SS extends ServiceSchema = ServiceSchema> = {
+	type ServiceHookGroupSchemaWrapper<SHG, SS extends Partial<ServiceSchema> = ServiceSchema> = {
 		[Name in keyof SHG]: SHG[Name] extends any[] ? HookArrayWrapper<SHG[Name], SS> : SHG[Name];
 	};
 
 	type ActionHookGroupSchemaWrapper<
 		AHG,
-		SS extends ServiceSchema = ServiceSchema
+		SS extends Partial<ServiceSchema> = ServiceSchema
 	> = AHG extends any[] ? HookArrayWrapper<AHG, SS> : AHG;
 
-	type HookArrayWrapper<HA, SS extends ServiceSchema = ServiceSchema> = {
+	type HookArrayWrapper<HA, SS extends Partial<ServiceSchema> = ServiceSchema> = {
 		[K in keyof HA]: HA[K] extends (...args: any) => any
 			? (this: ServiceType<SS>, ...args: Parameters<HA[K]>) => ReturnType<HA[K]>
 			: string;
@@ -777,15 +777,13 @@ declare namespace Moleculer {
 	type OmitWithIndexSignature<T, K extends PropertyKey> = {
 		[P in keyof T as Exclude<P, K>]: T[P];
 	};
-	type ServiceSchemaWrapper<SS extends ServiceSchema = ServiceSchema> = OmitWithIndexSignature<
-		SS,
-		"hooks" | "actions"
-	> & {
-		hooks?: ServiceHooksSchemaWrapper<SS["hooks"], SS>;
-		actions?: ServiceActionsSchemaWrapper<SS>;
-	} & ThisType<ServiceType<SS>>;
+	type ServiceSchemaWrapper<SS extends Partial<ServiceSchema> = ServiceSchema> =
+		OmitWithIndexSignature<SS, "hooks" | "actions"> & {
+			hooks?: ServiceHooksSchemaWrapper<SS["hooks"], SS>;
+			actions?: ServiceActionsSchemaWrapper<SS>;
+		} & ThisType<ServiceType<SS>>;
 
-	type ServiceActionsSchemaWrapper<SS extends ServiceSchema = ServiceSchema> = {
+	type ServiceActionsSchemaWrapper<SS extends Partial<ServiceSchema> = ServiceSchema> = {
 		[Name in keyof SS["actions"]]: SS["actions"][Name] extends ActionSchema
 			? OmitWithIndexSignature<SS["actions"][Name], "hooks"> & {
 					hooks?: SS["actions"][Name]["hooks"] extends ActionHooks
@@ -825,24 +823,18 @@ declare namespace Moleculer {
 			: never
 		: {};
 
-	type MergedActionSchemas<SS extends ServiceSchema = ServiceSchema> = MergedMixinsProperty<
-		SS["mixins"],
-		"actions"
-	> &
-		SS["actions"];
+	type MergedActionSchemas<SS extends Partial<ServiceSchema> = ServiceSchema> =
+		MergedMixinsProperty<SS["mixins"], "actions"> & SS["actions"];
 
 	type ServiceMethodsSchema = { [key: string]: (...args: any[]) => any };
-	type MergedMethodSchemas<SS extends ServiceSchema = ServiceSchema> = MergedMixinsProperty<
-		SS["mixins"],
-		"methods"
-	> &
-		SS["methods"];
+	type MergedMethodSchemas<SS extends Partial<ServiceSchema> = ServiceSchema> =
+		MergedMixinsProperty<SS["mixins"], "methods"> & SS["methods"];
 
-	type ServiceMethods<SS extends ServiceSchema> = {
+	type ServiceMethods<SS extends Partial<ServiceSchema>> = {
 		[Name in keyof MergedMethodSchemas<SS>]: MergedMethodSchemas<SS>[Name];
 	};
 
-	type ServiceActions<SS extends ServiceSchema = ServiceSchema> = {
+	type ServiceActions<SS extends Partial<ServiceSchema> = ServiceSchema> = {
 		[Name in keyof MergedActionSchemas<SS>]: MergedActionSchemas<SS>[Name] extends
 			| ActionSchema
 			| ActionHandler
@@ -876,7 +868,7 @@ declare namespace Moleculer {
 		statuses: Array<{ name: string; available: boolean }>;
 	}
 
-	class Service<SS extends ServiceSchema = ServiceSchema> {
+	class Service<SS extends Partial<ServiceSchema> = ServiceSchema> {
 		constructor(broker: ServiceBroker, schema?: SS);
 
 		protected parseServiceSchema(schema: ServiceSchemaWrapper<SS>): void;
@@ -932,7 +924,8 @@ declare namespace Moleculer {
 		static mergeSchemaUnknown(src: GenericObject, target: GenericObject): GenericObject;
 	}
 
-	type ServiceType<SS extends ServiceSchema = ServiceSchema> = Service<SS> & ServiceMethods<SS>;
+	type ServiceType<SS extends Partial<ServiceSchema> = ServiceSchema> = Service<SS> &
+		ServiceMethods<SS>;
 
 	type CheckRetryable = (err: Errors.MoleculerError | Error) => boolean;
 
