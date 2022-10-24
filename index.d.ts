@@ -809,26 +809,26 @@ declare namespace Moleculer {
 		? I
 		: never;
 
-	type FlattenedMixinsProperty<
-		M extends Partial<ServiceSchema>[],
-		P extends "actions" | "methods"
-	> = { [K in keyof M]: M[K][P] };
+	type TupleToIntersection<T> = TupleToUnion<T> extends any
+	? UnionToIntersection<TupleToUnion<T>>
+	: never
 
-	type MergedMixinsProperty<
+	type SubPropertiesType<M extends GenericObject | GenericObject[], P extends string> = { [K in keyof M]: P extends keyof M[K] ? M[K][P] : never}
+
+
+	type MergeMixinsProperties<
 		M extends Partial<ServiceSchema>[] | undefined,
-		P extends "actions" | "methods"
+		P extends "actions" | "methods" | "topLevel" = "topLevel"
 	> = M extends Partial<ServiceSchema>[]
-		? TupleToUnion<FlattenedMixinsProperty<M, P>> extends any
-			? UnionToIntersection<TupleToUnion<FlattenedMixinsProperty<M, P>>>
-			: never
+		? P extends "topLevel" ? TupleToIntersection<M> : TupleToIntersection<SubPropertiesType<M, P>>
 		: {};
 
 	type MergedActionSchemas<SS extends Partial<ServiceSchema> = ServiceSchema> =
-		MergedMixinsProperty<SS["mixins"], "actions"> & SS["actions"];
+		MergeMixinsProperties<SS["mixins"], "actions"> & SS["actions"];
 
 	type ServiceMethodsSchema = { [key: string]: (...args: any[]) => any };
 	type MergedMethodSchemas<SS extends Partial<ServiceSchema> = ServiceSchema> =
-		MergedMixinsProperty<SS["mixins"], "methods"> & SS["methods"];
+	MergeMixinsProperties<SS["mixins"], "methods"> & SS["methods"];
 
 	type ServiceMethods<SS extends Partial<ServiceSchema>> = {
 		[Name in keyof MergedMethodSchemas<SS>]: MergedMethodSchemas<SS>[Name];
@@ -850,8 +850,8 @@ declare namespace Moleculer {
 		N extends keyof MAS
 	> = MAS[N] extends ActionHandler
 		? Parameters<MAS[N]>[0]["params"]
-		: MAS[N] extends ActionSchema & { handler: ActionHandler }
-		? Parameters<MAS[N]["handler"]>[0]["params"]
+		: MAS[N] extends ActionSchema
+		? MAS[N]["handler"] extends ActionHandler ? Parameters<MAS[N]["handler"]>[0]["params"] : {}
 		: {};
 
 	type ServiceActionReturnType<
@@ -859,8 +859,8 @@ declare namespace Moleculer {
 		N extends keyof MAS
 	> = MAS[N] extends ActionHandler
 		? ReturnType<MAS[N]>
-		: MAS[N] extends ActionSchema & { handler: ActionHandler }
-		? ReturnType<MAS[N]["handler"]>
+		: MAS[N] extends ActionSchema
+		? MAS[N]["handler"] extends ActionHandler ? ReturnType<MAS[N]["handler"]>:void
 		: void;
 
 	interface WaitForServicesResult {
@@ -924,7 +924,7 @@ declare namespace Moleculer {
 		static mergeSchemaUnknown(src: GenericObject, target: GenericObject): GenericObject;
 	}
 
-	type ServiceType<SS extends Partial<ServiceSchema> = ServiceSchema> = Service<SS> &
+	type ServiceType<SS extends Partial<ServiceSchema> = ServiceSchema> = MergeMixinsProperties<SS["mixins"]> & Service<SS> &
 		ServiceMethods<SS>;
 
 	type CheckRetryable = (err: Errors.MoleculerError | Error) => boolean;
